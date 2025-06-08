@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Reaction Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #6d28d9; /* Deep purple background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            flex-direction: column;
+        }
+        .game-container {
+            background-color: #ede9fe; /* Light purple */
+            border-radius: 1.5rem; /* rounded-3xl */
+            padding: 2.5rem; /* p-10 */
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1); /* shadow-2xl */
+            text-align: center;
+            width: 90%;
+            max-width: 600px;
+            position: relative;
+            overflow: hidden;
+            border: 4px solid #a78bfa; /* purple-400 */
+        }
+        .emoji-display {
+            font-size: 8rem; /* Large emoji size */
+            margin-bottom: 2rem;
+            height: 120px; /* Fixed height to prevent layout shift */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.1s ease-out, opacity 0.1s ease-out; /* Smooth pop-up/fade */
+        }
+        .emoji-display.hidden {
+            opacity: 0;
+            transform: scale(0.5);
+        }
+        .start-button, .play-again-button {
+            padding: 1rem 2.5rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-radius: 9999px; /* rounded-full */
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background-image: linear-gradient(to right, #6366f1, #9333ea); /* Blue-purple gradient */
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .start-button:hover, .play-again-button:hover {
+            background-image: linear-gradient(to right, #4f46e5, #7e22ce);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+        }
+
+        .start-button:active, .play-again-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .button-pulse {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(147, 51, 234, 0.7);
+            }
+            70% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 10px rgba(147, 51, 234, 0);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(147, 51, 234, 0);
+            }
+        }
+
+        .message-box {
+            background-color: #fff;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            display: none; /* Hidden by default */
+        }
+        .message-box button {
+            background-color: #6366f1;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            margin-top: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .message-box button:hover {
+            background-color: #4f46e5;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="text-4xl font-extrabold text-gray-800 mb-6">Emoji Reaction Game</h1>
+        <p class="text-xl text-gray-600 mb-4" id="instructions">
+            Press the matching key quickly! 😊 = H, 😡 = A, 😢 = S
+        </p>
+
+        <div class="emoji-display" id="emojiDisplay">
+            <!-- Emoji will appear here -->
+        </div>
+
+        <p class="text-3xl font-bold text-gray-700 mb-4">Score: <span id="score">0</span></p>
+        <p class="text-xl text-gray-600 mb-6">Time Left: <span id="timeLeft">--</span>s</p>
+
+        <button id="startButton" class="start-button button-pulse">Start Game</button>
+        <button id="playAgainButton" class="play-again-button hidden">Play Again</button>
+
+        <div id="gameMessage" class="text-red-600 font-bold text-xl mt-4 hidden"></div>
+    </div>
+
+    <!-- Custom Message Box -->
+    <div id="customMessageBox" class="message-box">
+        <h2 class="text-2xl font-bold mb-4" id="messageBoxTitle"></h2>
+        <p class="text-gray-700 mb-4" id="messageBoxContent"></p>
+        <button id="messageBoxOkButton">OK</button>
+    </div>
+
+    <script>
+        const emojiMap = {
+            '😊': 'H',
+            '😡': 'A',
+            '�': 'S'
+        };
+        const emojis = Object.keys(emojiMap);
+
+        let score = 0;
+        let timeLeft = 30; // Initial game time in seconds
+        let timer;
+        let gameActive = false;
+        let currentEmoji = '';
+        let lastEmojiTime = 0;
+        let minTimeBetweenEmojis = 800; // milliseconds
+        let maxTimeBetweenEmojis = 1500; // milliseconds
+        let timeReductionFactor = 0.95; // Reduces max/min time between emojis over time
+
+        // DOM elements
+        const emojiDisplay = document.getElementById('emojiDisplay');
+        const scoreDisplay = document.getElementById('score');
+        const timeLeftDisplay = document.getElementById('timeLeft');
+        const startButton = document.getElementById('startButton');
+        const playAgainButton = document.getElementById('playAgainButton');
+        const gameMessage = document.getElementById('gameMessage');
+        const instructions = document.getElementById('instructions');
+
+        // Message Box elements
+        const customMessageBox = document.getElementById('customMessageBox');
+        const messageBoxTitle = document.getElementById('messageBoxTitle');
+        const messageBoxContent = document.getElementById('messageBoxContent');
+        const messageBoxOkButton = document.getElementById('messageBoxOkButton');
+
+        /**
+         * Displays a custom message box instead of alert().
+         * @param {string} title - The title of the message box.
+         * @param {string} content - The content message.
+         * @returns {Promise<void>} - Resolves when the OK button is clicked.
+         */
+        function showMessageBox(title, content) {
+            messageBoxTitle.textContent = title;
+            messageBoxContent.textContent = content;
+            customMessageBox.style.display = 'block';
+            return new Promise(resolve => {
+                messageBoxOkButton.onclick = () => {
+                    customMessageBox.style.display = 'none';
+                    resolve();
+                };
+            });
+        }
+
+        /**
+         * Initializes the game state.
+         */
+        function initializeGame() {
+            score = 0;
+            timeLeft = 30;
+            currentEmoji = '';
+            gameActive = false;
+            minTimeBetweenEmojis = 800;
+            maxTimeBetweenEmojis = 1500;
+
+            scoreDisplay.textContent = score;
+            timeLeftDisplay.textContent = timeLeft;
+            emojiDisplay.textContent = '';
+            emojiDisplay.classList.add('hidden'); // Hide emoji initially
+            gameMessage.classList.add('hidden');
+            startButton.classList.remove('hidden');
+            startButton.classList.add('button-pulse'); // Add pulse animation back
+            playAgainButton.classList.add('hidden');
+            instructions.classList.remove('hidden'); // Show instructions
+        }
+
+        /**
+         * Starts the game.
+         */
+        function startGame() {
+            gameActive = true;
+            startButton.classList.add('hidden');
+            startButton.classList.remove('button-pulse'); // Remove pulse animation
+            playAgainButton.classList.add('hidden');
+            instructions.classList.add('hidden'); // Hide instructions
+
+            timeLeftDisplay.textContent = timeLeft;
+            timer = setInterval(gameLoop, 1000); // Update every second
+            showRandomEmoji();
+        }
+
+        /**
+         * The main game loop, called every second.
+         */
+        function gameLoop() {
+            timeLeft--;
+            timeLeftDisplay.textContent = timeLeft;
+
+            if (timeLeft <= 0) {
+                endGame("Time's up!");
+            }
+        }
+
+        /**
+         * Displays a random emoji on the screen.
+         */
+        function showRandomEmoji() {
+            if (!gameActive) return;
+
+            const now = Date.now();
+            if (now - lastEmojiTime < minTimeBetweenEmojis) {
+                // If it's too soon for a new emoji, wait a bit
+                setTimeout(showRandomEmoji, minTimeBetweenEmojis - (now - lastEmojiTime));
+                return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * emojis.length);
+            currentEmoji = emojis[randomIndex];
+            emojiDisplay.textContent = currentEmoji;
+            emojiDisplay.classList.remove('hidden'); // Show emoji
+            emojiDisplay.style.transform = 'scale(1)'; // Pop up effect
+            emojiDisplay.style.opacity = '1';
+
+            lastEmojiTime = now;
+
+            // Hide the emoji after a random duration (which is maxTimeBetweenEmojis)
+            // And then show a new one
+            setTimeout(() => {
+                hideEmoji();
+                if (gameActive) {
+                    showRandomEmoji();
+                }
+            }, maxTimeBetweenEmojis);
+
+            // Gradually increase difficulty
+            if (maxTimeBetweenEmojis > 500) { // Don't let it get too fast
+                maxTimeBetweenEmojis *= timeReductionFactor;
+                minTimeBetweenEmojis *= timeReductionFactor;
+            }
+        }
+
+        /**
+         * Hides the current emoji.
+         */
+        function hideEmoji() {
+            emojiDisplay.classList.add('hidden'); // Hide emoji
+            emojiDisplay.style.transform = 'scale(0.5)'; // Shrink effect
+            emojiDisplay.style.opacity = '0';
+        }
+
+        /**
+         * Ends the game and displays the final score.
+         * @param {string} reason - The reason for the game ending.
+         */
+        function endGame(reason) {
+            gameActive = false;
+            clearInterval(timer);
+            hideEmoji(); // Ensure emoji is hidden
+            gameMessage.textContent = reason;
+            gameMessage.classList.remove('hidden');
+            playAgainButton.classList.remove('hidden');
+            
+            showMessageBox('Game Over!', `Your final score: ${score}! ${reason}`);
+        }
+
+        /**
+         * Handles keyboard input from the player.
+         * @param {KeyboardEvent} event - The keyboard event.
+         */
+        document.addEventListener('keydown', (event) => {
+            if (!gameActive || !currentEmoji) return; // Only process if game is active and an emoji is displayed
+
+            const pressedKey = event.key.toUpperCase();
+            const requiredKey = emojiMap[currentEmoji];
+
+            if (pressedKey === requiredKey) {
+                score++;
+                scoreDisplay.textContent = score;
+                gameMessage.classList.add('hidden'); // Hide any previous error message
+                hideEmoji(); // Hide current emoji immediately
+                // The setTimeout in showRandomEmoji will handle showing the next one
+            } else {
+                // Wrong key pressed
+                endGame(`Wrong key! You pressed '${event.key.toUpperCase()}', but expected '${requiredKey}'.`);
+            }
+        });
+
+        // Event Listeners for buttons
+        startButton.addEventListener('click', startGame);
+        playAgainButton.addEventListener('click', initializeGame);
+
+        // Initial game setup when the page loads
+        window.onload = initializeGame;
+    </script>
+</body>
+</html>
+�
